@@ -49,9 +49,14 @@ def agent_mc_run(run_number = 0, num_transactions=1e5, num_agents=500,
         random0 = np.random.rand(1) 
         random1 = np.random.rand(1) 
         if m_0_new>0 and m_1_new>0:
-            if random0<np.exp(-delta_m/m_0) and random1<np.exp(-delta_m/m_1):
-                df.at[int(ID0), 'wealth'] = m_0_new
-                df.at[int(ID1), 'wealth'] = m_1_new
+            e0 = -delta_m/m_0
+            e1 = -delta_m/m_1
+            if e0>709 or e1>709 or e0<-709 or e1<-709:
+                pass
+            else:
+                if random0<np.exp(e0) and random1<np.exp(e1):
+                    df.at[int(ID0), 'wealth'] = m_0_new
+                    df.at[int(ID1), 'wealth'] = m_1_new
     return df
 
 
@@ -59,17 +64,28 @@ if __name__ == '__main__':
     from joblib import Parallel, delayed
     import matplotlib.pyplot as plt
     
-    num_runs = 16
-    num_transactions = 1e5
+    num_runs = 100
+    num_transactions = 1e6
     num_agents = 500
-    df_list = Parallel(n_jobs=-1, verbose=10)(delayed(agent_mc_run)
-                    (run_number=n, num_transactions=num_transactions, 
-                     num_agents=num_agents) 
-                    for n in range(num_runs))
-    df_all_runs = pd.concat(df_list)
+    save_percent_list = [0.0, 0.25, 0.5, 0.9]
+    for save_percent in save_percent_list:
+        df_list = Parallel(n_jobs=-1, verbose=10)(delayed(agent_mc_run)
+                        (run_number=n, num_transactions=num_transactions, 
+                         num_agents=num_agents, save_percent=save_percent) 
+                        for n in range(num_runs))
+        df_all_runs = pd.concat(df_list)
+        df_all_runs.to_csv(f'df_all_runs_save_{save_percent:.2f}.csv', 
+                           index=False)
+        
+        
+        fig, ax = plt.subplots()
+        df_all_runs.hist(column='wealth', ax=ax)
+        ax.set_yscale('log')
+        #ax.set_xscale('log')
+        save_figure = True
+        if save_figure:
+            fig.savefig(f'hist_all_runs_{save_percent:.2f}.png')
     
-    df_all_runs.hist(column='wealth')
-    df_all_runs.to_csv('df_all_runs.csv', index=False)
     
     
     
