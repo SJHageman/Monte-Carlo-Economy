@@ -30,6 +30,7 @@
 
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
 def agent_mc_run(run_number = 0, num_transactions=1e5, num_agents=500, 
                  save_percent=0.0):
@@ -59,15 +60,36 @@ def agent_mc_run(run_number = 0, num_transactions=1e5, num_agents=500,
                     df.at[int(ID1), 'wealth'] = m_1_new
     return df
 
+def agent_MCMC(num_transactions=1e5, num_agents=500, 
+                 save_percent=0.0, m0=1.0):
+    agents = m0*np.ones(num_agents)
+    rng = np.random.default_rng()
+    #indx_pairs = [rng.integers(0, high=num_agents, size=2) for n in range(num_transactions)]
+    for n in tqdm(range(int(num_transactions))):
+        id0,id1 = rng.integers(0, high=num_agents, size=2)
+        eps, rnd0, rnd1 = rng.random(3)
+        m_0 = agents[id0]
+        m_1 = agents[id1]
+        delta_m = (1.-save_percent) * (eps * m_1 - (1.-eps) * m_0)
+        m_0_new = m_0 + delta_m
+        m_1_new = m_1 - delta_m
+        if m_0_new>0 and m_1_new>0:
+            e0 = -delta_m/m_0
+            e1 = -delta_m/m_1
+            if np.log(rnd0)<e0 and np.log(rnd1)<e1:
+                agents[id0] = m_0_new
+                agents[id1] = m_1_new
+    return agents
 
 if __name__ == '__main__':
     from joblib import Parallel, delayed
     import matplotlib.pyplot as plt
     
-    num_runs = 100
-    num_transactions = 1e6
+    num_runs = 30
+    num_transactions = 1e7
     num_agents = 500
-    save_percent_list = [0.0, 0.25, 0.5, 0.9]
+    save_percent_list = [0.0]
+    """
     for save_percent in save_percent_list:
         df_list = Parallel(n_jobs=-1, verbose=10)(delayed(agent_mc_run)
                         (run_number=n, num_transactions=num_transactions, 
@@ -82,9 +104,11 @@ if __name__ == '__main__':
         df_all_runs.hist(column='wealth', ax=ax)
         ax.set_yscale('log')
         #ax.set_xscale('log')
-        save_figure = True
+        save_figure = False
         if save_figure:
-            fig.savefig(f'hist_all_runs_{save_percent:.2f}.png')
+            fig.savefig(f'hist_all_runs_{save_percent:.2f}_trans_{np.log10(num_transactions):.0f}.png')
+    """
+    _ = agent_MCMC(num_transactions=num_transactions, num_agents=num_agents, save_percent=save_percent_list[0])
     
     
     
