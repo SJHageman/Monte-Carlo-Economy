@@ -65,7 +65,7 @@ def agent_MCMC(num_transactions=1e5, num_agents=500,
     agents = m0*np.ones(num_agents)
     rng = np.random.default_rng()
     #indx_pairs = [rng.integers(0, high=num_agents, size=2) for n in range(num_transactions)]
-    for n in tqdm(range(int(num_transactions))):
+    for n in range(int(num_transactions)):
         id0,id1 = rng.integers(0, high=num_agents, size=2)
         eps, rnd0, rnd1 = rng.random(3)
         m_0 = agents[id0]
@@ -84,11 +84,13 @@ def agent_MCMC(num_transactions=1e5, num_agents=500,
 if __name__ == '__main__':
     from joblib import Parallel, delayed
     import matplotlib.pyplot as plt
-    
-    num_runs = 30
+    import contextlib
+    import joblib
+
+    num_runs = 1000
     num_transactions = 1e7
     num_agents = 500
-    save_percent_list = [0.0]
+    save_percent_list = [0.0, 0.25, 0.5, 0.75]
     """
     for save_percent in save_percent_list:
         df_list = Parallel(n_jobs=-1, verbose=10)(delayed(agent_mc_run)
@@ -108,8 +110,55 @@ if __name__ == '__main__':
         if save_figure:
             fig.savefig(f'hist_all_runs_{save_percent:.2f}_trans_{np.log10(num_transactions):.0f}.png')
     """
-    _ = agent_MCMC(num_transactions=num_transactions, num_agents=num_agents, save_percent=save_percent_list[0])
-    
+    #_ = agent_MCMC(num_transactions=num_transactions, num_agents=num_agents, save_percent=save_percent_list[0])
+
+
+    @contextlib.contextmanager
+    def tqdm_joblib(tqdm_object):
+        """Context manager to patch joblib to report into tqdm progress bar given as argument"""
+        class TqdmBatchCompletionCallback(joblib.parallel.BatchCompletionCallBack):
+            def __call__(self, *args, **kwargs):
+                tqdm_object.update(n=self.batch_size)
+                return super().__call__(*args, **kwargs)
+        
+        old_batch_callback = joblib.parallel.BatchCompletionCallBack
+        joblib.parallel.BatchCompletionCallBack = TqdmBatchCompletionCallback
+        try:
+            yield tqdm_object
+        finally:
+            joblib.parallel.BatchCompletionCallBack = old_batch_callback
+            tqdm_object.close()    
+
+    save_arrays = True
+    fig, ax = plt.subplots()
+    colorsy = plt.cm.jet(np.linspace(0,1,len(save_percent_list)))
+    fig2, axs = plt.subplots(2,2)
+    for a,c,save_percent in zip(axs.flatten(),colorsy, save_percent_list):
+        fname = f'agentsN={num_agents}_savep={save_percent:.2f}_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.npy'
+        try:
+            agent_runs = np.load(fname)
+        except FileNotFoundError:
+            with tqdm_joblib(tqdm(desc=f"Save percent {save_percent:.2f}", total=num_runs)) as progress_bar:
+                agent_runs = Parallel(n_jobs=-2)(delayed(agent_MCMC)
+                                (num_transactions=num_transactions, 
+                                num_agents=num_agents, save_percent=save_percent) 
+                                for n in range(num_runs))          
+            if save_arrays:
+                np.save(fname, agent_runs)
+        
+        ax.hist(np.array(agent_runs).flatten(), bins=100, range=(0,100), 
+                        label=save_percent, alpha=0.5, edgecolor='black', linewidth=1, color=c)
+        a.hist(np.array(agent_runs).flatten(), bins=100,
+                        label=save_percent, alpha=0.5, edgecolor='black', linewidth=1, color=c)
+        a.set_yscale('log')
+        a.legend()
+    ax.set_yscale('log')
+    #ax.set_xscale('log')
+    ax.legend()
+    save_figure = True
+    if save_figure:
+        fig.savefig(f'hist_all_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
+        fig2.savefig(f'hist_ind_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
     
     
     
