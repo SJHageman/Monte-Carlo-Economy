@@ -16,7 +16,7 @@
 //
 //**************************************************************************
 //	Pseudocode:
-//		initialize population of N=500 agents with m_0=500 => <m>=1
+//		initialize population of N=500 agents with m_0=1 => <m>=1
 //		for 10^3-10^4 runs
 //			for 10^7 transactions
 //				randomly pick two agents
@@ -31,88 +31,63 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-
-def agent_mc_run(run_number = 0, num_transactions=1e5, num_agents=500, 
-                 save_percent=0.0):
-    df = pd.DataFrame({'ID':np.arange(num_agents, dtype=int), 
-                       'wealth':np.ones(num_agents),
-                       'run_number':run_number*np.ones(num_agents)})
-    for n in np.arange(num_transactions):
-        transaction_df = df.sample(n=2)
-        m_0 = transaction_df.iloc[0].wealth
-        m_1 = transaction_df.iloc[1].wealth
-        ID0 = transaction_df.iloc[0].ID
-        ID1 = transaction_df.iloc[1].ID
-        eps = np.random.rand(1)
-        delta_m = (1.-save_percent) * (eps * m_1 - (1.-eps) * m_0)
-        m_0_new = m_0 + delta_m
-        m_1_new = m_1 - delta_m
-        random0 = np.random.rand(1) 
-        random1 = np.random.rand(1) 
-        if m_0_new>0 and m_1_new>0:
-            e0 = -delta_m/m_0
-            e1 = -delta_m/m_1
-            if e0>709 or e1>709 or e0<-709 or e1<-709:
-                pass
-            else:
-                if random0<np.exp(e0) and random1<np.exp(e1):
-                    df.at[int(ID0), 'wealth'] = m_0_new
-                    df.at[int(ID1), 'wealth'] = m_1_new
-    return df
+from scipy.special import gamma
+from matplotlib.colors import LinearSegmentedColormap
 
 def agent_MCMC(num_transactions=1e5, num_agents=500, 
                  save_percent=0.0, m0=1.0):
-    agents = m0*np.ones(num_agents)
+    agents = np.array([m0*np.ones(num_agents),np.zeros(num_agents)]).T
     rng = np.random.default_rng()
-    #indx_pairs = [rng.integers(0, high=num_agents, size=2) for n in range(num_transactions)]
     for n in range(int(num_transactions)):
         id0,id1 = rng.integers(0, high=num_agents, size=2)
-        eps, rnd0, rnd1 = rng.random(3)
-        m_0 = agents[id0]
-        m_1 = agents[id1]
+        eps = rng.random(1)
+        m_0 = agents[id0,0]
+        m_1 = agents[id1,0]
         delta_m = (1.-save_percent) * (eps * m_1 - (1.-eps) * m_0)
         m_0_new = m_0 + delta_m
         m_1_new = m_1 - delta_m
         if m_0_new>0 and m_1_new>0:
-            e0 = -delta_m/m_0
-            e1 = -delta_m/m_1
-            if np.log(rnd0)<e0 and np.log(rnd1)<e1:
-                agents[id0] = m_0_new
-                agents[id1] = m_1_new
+            agents[id0,0] = m_0_new
+            agents[id1,0] = m_1_new
+            agents[id0,1] += 1
+            agents[id1,1] += 1
     return agents
+
+def extended_Gibbs_dist(m, lam):
+    n = 1 + 3*lam/(1-lam)
+    a_n = n**n/gamma(n)
+    p_n = a_n*m**(n-1)*np.exp(-n*m)
+    return p_n
+
+def cmapy(num_of_lines):
+    start = 0.0 
+    stop = 1.0 
+    number_of_lines = num_of_lines
+    cm_subsection = np.linspace(start, stop, number_of_lines) 
+    cmapy_RB = LinearSegmentedColormap.from_list('mycmap', ['darkred', 'purple', 'darkblue','dodgerblue'])
+    colorsy = [ cmapy_RB(x) for x in cm_subsection ]
+    return colorsy
 
 if __name__ == '__main__':
     from joblib import Parallel, delayed
     import matplotlib.pyplot as plt
     import contextlib
     import joblib
+    from scipy.stats import pareto
+    from scipy.optimize import curve_fit
 
+    # hyperparameters for MCMC run
     num_runs = 1000
-    num_transactions = 1e7
+    n_jobs = -2
+    num_transactions = 1e6
     num_agents = 500
     save_percent_list = [0.0, 0.25, 0.5, 0.75]
-    """
-    for save_percent in save_percent_list:
-        df_list = Parallel(n_jobs=-1, verbose=10)(delayed(agent_mc_run)
-                        (run_number=n, num_transactions=num_transactions, 
-                         num_agents=num_agents, save_percent=save_percent) 
-                        for n in range(num_runs))
-        df_all_runs = pd.concat(df_list)
-        df_all_runs.to_csv(f'df_all_runs_save_{save_percent:.2f}.csv', 
-                           index=False)
-        
-        
-        fig, ax = plt.subplots()
-        df_all_runs.hist(column='wealth', ax=ax)
-        ax.set_yscale('log')
-        #ax.set_xscale('log')
-        save_figure = False
-        if save_figure:
-            fig.savefig(f'hist_all_runs_{save_percent:.2f}_trans_{np.log10(num_transactions):.0f}.png')
-    """
-    #_ = agent_MCMC(num_transactions=num_transactions, num_agents=num_agents, save_percent=save_percent_list[0])
 
+    # booleans to determine whether to save generated agent arrays and the descriptive figures
+    save_arrays = True
+    save_figure = True
 
+    #change joblibs progress bar to the tqdm progress bar
     @contextlib.contextmanager
     def tqdm_joblib(tqdm_object):
         """Context manager to patch joblib to report into tqdm progress bar given as argument"""
@@ -127,38 +102,72 @@ if __name__ == '__main__':
             yield tqdm_object
         finally:
             joblib.parallel.BatchCompletionCallBack = old_batch_callback
-            tqdm_object.close()    
+            tqdm_object.close()   
 
-    save_arrays = True
-    fig, ax = plt.subplots()
-    colorsy = plt.cm.jet(np.linspace(0,1,len(save_percent_list)))
-    fig2, axs = plt.subplots(2,2)
-    for a,c,save_percent in zip(axs.flatten(),colorsy, save_percent_list):
-        fname = f'agentsN={num_agents}_savep={save_percent:.2f}_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.npy'
+    #initialize figures
+    fig_pdf, ax = plt.subplots()
+    fig_hist, axs = plt.subplots(4,1, sharex=True, sharey=True, figsize=(6,8))
+    fig_corr, ax_corr = plt.subplots()
+    colorsy = cmapy(len(save_percent_list))#plt.cm.jet(np.linspace(0,1,len(save_percent_list)))
+
+    # initialize bins for histograms
+    bin_size = 0.05
+    hist_bins = np.arange(0,20,bin_size)
+
+    # run MCMC for different saving parameters
+    for z,a,c,save_percent in zip(np.arange(len(save_percent_list))[::-1], axs.flatten(), colorsy, save_percent_list):
+        # filename of saved npy array
+        fname = f'agentsN={num_agents}_savep={save_percent:.2f}_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}_transN.npy'
+
+        # try and load array, calculate if not found
         try:
             agent_runs = np.load(fname)
         except FileNotFoundError:
             with tqdm_joblib(tqdm(desc=f"Save percent {save_percent:.2f}", total=num_runs)) as progress_bar:
-                agent_runs = Parallel(n_jobs=-2)(delayed(agent_MCMC)
+                agent_runs = Parallel(n_jobs=n_jobs)(delayed(agent_MCMC)
                                 (num_transactions=num_transactions, 
                                 num_agents=num_agents, save_percent=save_percent) 
-                                for n in range(num_runs))          
+                                for n in range(num_runs))
+                agent_runs = np.array(agent_runs)
             if save_arrays:
                 np.save(fname, agent_runs)
-        
-        ax.hist(np.array(agent_runs).flatten(), bins=100, range=(0,100), 
-                        label=save_percent, alpha=0.5, edgecolor='black', linewidth=1, color=c)
-        a.hist(np.array(agent_runs).flatten(), bins=100,
-                        label=save_percent, alpha=0.5, edgecolor='black', linewidth=1, color=c)
-        a.set_yscale('log')
+
+        # get agent wealth and number of transactions
+        agent_wealth = agent_runs[:,:,0]
+        agent_transactions = agent_runs[:,:,1]
+
+        # generate and plot histograms
+        count, bins, _ = a.hist(agent_wealth.flatten(), bins=hist_bins, 
+                        label=save_percent, color=c, zorder=z)
         a.legend()
-    ax.set_yscale('log')
-    #ax.set_xscale('log')
+        a.set_yscale('log')
+        a.set_xlim(0,12)
+        count, bins, _ = ax.hist(agent_wealth.flatten(), bins=hist_bins, alpha=0.0,
+                                    color=c, density=True, stacked=True, zorder=z)
+        bin_centers = bins[:-1] + 0.5*bin_size
+        m_avg = np.sum(agent_runs[:,:,0])/(num_runs*num_agents)
+        ax.plot(bin_centers, count, 'o', c=c, mec='black', label=save_percent)
+        ax.plot(bin_centers, extended_Gibbs_dist(bin_centers/m_avg,save_percent), c=c)
+
+        #plot correlation coefficient between number of transactions and wealth
+        correlation_coef = np.corrcoef(agent_wealth.flatten(), agent_transactions.flatten())[0,1]
+        ax_corr.plot(save_percent, correlation_coef, 'o', c=c, alpha=0.8, mec='black')
+
+    # set final figure params
+    ax.set_xlim(0,2.5)
     ax.legend()
-    save_figure = True
+    fig_pdf.supylabel('Probability density')
+    fig_pdf.supxlabel('Wealth')
+    fig_hist.supxlabel('Wealth')
+    fig_hist.supylabel('Counts')
+    fig_hist.tight_layout()
+    fig_pdf.tight_layout()
+
+    # save figures
     if save_figure:
-        fig.savefig(f'hist_all_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
-        fig2.savefig(f'hist_ind_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
+        fig_pdf.savefig(f'hist_all_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
+        fig_hist.savefig(f'hist_ind_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
+        fig_corr.savefig(f'slope_vs_savings.png')
     
     
     
