@@ -124,6 +124,9 @@ if __name__ == '__main__':
     import contextlib
     import joblib
 
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+
     # hyperparameters for MCMC run
     num_runs = 1000
     n_jobs = -2
@@ -186,7 +189,7 @@ if __name__ == '__main__':
 
         # generate and plot histograms
         count, bins, _ = a.hist(agent_wealth.flatten(), bins=hist_bins, 
-                        label=save_percent, color=c, zorder=z)
+                        label=save_percent, color=c, zorder=z, alpha=0.8)
         a.legend()
         a.set_yscale('log')
         a.set_xlim(0,12)
@@ -194,8 +197,8 @@ if __name__ == '__main__':
                                     color=c, density=True, stacked=True, zorder=z)
         bin_centers = bins[:-1] + 0.5*bin_size
         m_avg = np.sum(agent_runs[:,:,0])/(num_runs*num_agents)
-        ax.plot(bin_centers, count, 'o', c=c, mec='black', label=save_percent)
-        ax.plot(bin_centers, extended_Gibbs_dist(bin_centers/m_avg,save_percent), c=c)
+        ax.plot(bin_centers, count, 'o', c=c, mec='black', alpha=0.8)
+        ax.plot(bin_centers, extended_Gibbs_dist(bin_centers/m_avg,save_percent), c=c, alpha=0.8)
 
         #plot correlation coefficient between number of transactions and wealth
         correlation_coef = np.corrcoef(agent_wealth.flatten(), agent_transactions.flatten())[0,1]
@@ -203,7 +206,17 @@ if __name__ == '__main__':
 
     # set final figure params
     ax.set_xlim(0,2.5)
-    ax.legend()
+    lines = ax.get_lines()
+    rangey = np.arange(2*len(save_percent_list))
+    legend1 = fig_pdf.legend([lines[i] for i in rangey[::2]], 
+                            [f'save={s:.2f}' for s in save_percent_list], 
+                            loc=(0.75,0.72), title='MCMC sim.')
+    legend2 = fig_pdf.legend([lines[i] for i in rangey[1::2]], 
+                            [f'$\lambda$={s:.2f}' for s in save_percent_list], 
+                            loc=(0.775,0.45), title='Theory')
+    ax.add_artist(legend1)
+    ax.add_artist(legend2)
+    #ax.legend()
     fig_pdf.supylabel('Probability density')
     fig_pdf.supxlabel('Wealth')
     fig_hist.supxlabel('Wealth')
