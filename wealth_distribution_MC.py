@@ -28,7 +28,6 @@
 //**************************************************************************
 """
 
-import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from scipy.special import gamma
@@ -36,6 +35,27 @@ from matplotlib.colors import LinearSegmentedColormap
 
 def agent_MCMC(num_transactions=1e5, num_agents=500, 
                  save_percent=0.0, m0=1.0):
+    """
+    Calculate Markov chain for a set of financial agents by allowing for
+    random transactions beteween them.
+
+    Parameters
+    ----------
+    num_transactions : int, optional
+        Number of transactions. The default is 1e5.
+    num_agents : int, optional
+        Number of agents. The default is 500.
+    save_percent : float, optional
+        Saving percentage for each agent. The default is 0.0.
+    m0 : float, optional
+        Inital amount of money each agent is given. The default is 1.0.
+
+    Returns
+    -------
+    agents : numpy array
+        Array of agents wealth and number of transactions.
+
+    """
     agents = np.array([m0*np.ones(num_agents),np.zeros(num_agents)]).T
     rng = np.random.default_rng()
     for n in range(int(num_transactions)):
@@ -54,12 +74,42 @@ def agent_MCMC(num_transactions=1e5, num_agents=500,
     return agents
 
 def extended_Gibbs_dist(m, lam):
+    """
+    Probability density describing non-Gibbs dynamics.
+
+    Parameters
+    ----------
+    m : array
+        Wealth of agents.
+    lam : float
+        Saving percent.
+
+    Returns
+    -------
+    p_n : array
+        Probability density.
+
+    """
     n = 1 + 3*lam/(1-lam)
     a_n = n**n/gamma(n)
     p_n = a_n*m**(n-1)*np.exp(-n*m)
     return p_n
 
 def cmapy(num_of_lines):
+    """
+    Generate list of colors for plotting.
+
+    Parameters
+    ----------
+    num_of_lines : int
+        Number of lines.
+
+    Returns
+    -------
+    colorsy : list
+        List of colors.
+
+    """
     start = 0.0 
     stop = 1.0 
     number_of_lines = num_of_lines
@@ -73,8 +123,6 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import contextlib
     import joblib
-    from scipy.stats import pareto
-    from scipy.optimize import curve_fit
 
     # hyperparameters for MCMC run
     num_runs = 1000
@@ -121,7 +169,7 @@ if __name__ == '__main__':
 
         # try and load array, calculate if not found
         try:
-            agent_runs = np.load(fname)
+            agent_runs = np.load(fname, allow_pickle=True)
         except FileNotFoundError:
             with tqdm_joblib(tqdm(desc=f"Save percent {save_percent:.2f}", total=num_runs)) as progress_bar:
                 agent_runs = Parallel(n_jobs=n_jobs)(delayed(agent_MCMC)
@@ -167,7 +215,7 @@ if __name__ == '__main__':
     if save_figure:
         fig_pdf.savefig(f'hist_all_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
         fig_hist.savefig(f'hist_ind_logNumTrans={np.log10(num_transactions):.0f}_runsN={num_runs}.png')
-        fig_corr.savefig(f'slope_vs_savings.png')
+        fig_corr.savefig('slope_vs_savings.png')
     
     
     
