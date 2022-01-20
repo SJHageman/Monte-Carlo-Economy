@@ -15,5 +15,5 @@ The agreement between the two is reasonable, and would probably improve with a l
 
 The natural inclincation is to compare these distributions with real-world wealth distributions to understand wealth inequality, however great care must be taken when doing so.  This is an extremely simple system that cannot capture the incredibly complicated macro and micro economic forces and economic policies that determine how wealth is distributed within a given society.  Nonetheless, the exponential behaviour of the low savings model reasonably captures what is seen in real wealth distributions.  They can generally be described by a power-law (Pareto) distributions for the high-wealth tail.
 
-Next steps for this project are increases the number of chains and transactions, and looking at how the number of number of transactions correlates with wealth.
+Next steps for this project are increases the number of chains and transactions, and looking at how the number of transactions correlates with wealth.
 
